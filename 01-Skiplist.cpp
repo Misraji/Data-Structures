@@ -13,6 +13,7 @@ using std::max;
 
 //=============================================================================
 
+// Each node in the skiplist.
 class Node {
 	public:
 		int key;
@@ -36,6 +37,8 @@ Node::~Node() {
 class Skiplist {
 	private:
 		const int MAX_LEVEL;
+		// Note that the type of P MUST be a float. I accidentally set it to
+		// int and then only had 1 level throughout the run.
 		const float P;
 
 		// current max-level of any node in this skiplist
@@ -53,6 +56,7 @@ class Skiplist {
 		bool search(int key);
 		void remove(int key);
 
+		// Simple friend function to print this skiplist to the standard-out.
 		friend std::ostream& operator<<(std::ostream &stream, const Skiplist &list);
 };
 
@@ -64,6 +68,7 @@ Skiplist::~Skiplist() {
 	Node *current = header;	
 	Node *next = NULL;
 
+	// Delete all the nodes. Note how we traverse only the lowest level.
 	while(current) {
 		next = current->forward[0];
 		delete current;
@@ -71,9 +76,11 @@ Skiplist::~Skiplist() {
 	}
 }
 
+// A method that generates the number of levels the new node should have.
 int Skiplist::random_level() {
 	float r = (float)rand() / RAND_MAX;
 	int level = 0;
+
 	while ((r < this->P) && (level < this->MAX_LEVEL)) {
 		++level;
 		r = (float)rand() / RAND_MAX;
@@ -81,9 +88,12 @@ int Skiplist::random_level() {
 	return level;
 }
 
+// This function simply gets the node that is equal-to-or-greater than the
+// given key. It can return NULL. It can NEVER return the this->header node.
 Node* Skiplist::get_equal_or_next(int key, Node** update) {
 	Node *current = this->header;
-	
+
+	// Note how we search from the top of the lists (from this->level)
 	for(int i = level; i >=0; i--) {
 		while ( current->forward[i] &&	
 			  (	current->forward[i]->key < key)) {
@@ -97,6 +107,8 @@ Node* Skiplist::get_equal_or_next(int key, Node** update) {
 
 	// Reached level 0. Forward the current to one position to the right.
 	// That is the insert position.
+	// Note that this automatically takes care of the situation that
+	// current==this->header.
 	return current->forward[0];
 }
 
@@ -116,13 +128,17 @@ void Skiplist::insert(int key) {
 	if ( (current == NULL) || (current->key != key)) {
 		
 		int new_level = random_level();
+		Node *n = new Node(key, new_level);
 
+		// Update max level of this skiplist. For the new levels created, set
+		// the corresponding pointer in update array to NULL.
 		for(int i = this->level + 1; i < (new_level+1); i++) {
 			update[i] = this->header;
 		}
 		this->level = max(this->level, new_level);
 
-		Node *n = new Node(key, new_level);
+		// Note how we update links from 0 to new_level. (** Hmm, the order
+		// may not be important in this case.)
 		for (int i = 0; i <= new_level; i++) {
 			n->forward[i] = update[i]->forward[i];
 			update[i]->forward[i] = n;
@@ -139,6 +155,9 @@ void Skiplist::remove(int key) {
 
 	if (current && (current->key == key)) {
 
+		// Establish links between nodes previous to current at all levels.
+		// Note how we start from 0 and break when prev-node (update[i]) does
+		// not point to current anymore.
 		for(int i = 0; i <= this->level; i++) {
 			if (update[i]->forward[i] != current) {
 				break;
@@ -192,7 +211,7 @@ int main() {
 
 	// Search for element 19
 	cout << "Found 19 = " << list.search(19) << endl;
-	cout << "Found 100 = " << list.search(100) << endl;
+	cout << "Found 100 = " << list.search(100) << endl << endl;
 
 	// Delete 19
 	cout << "Deleting 19..." << endl;
