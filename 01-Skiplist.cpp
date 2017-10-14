@@ -1,3 +1,5 @@
+// URL: http://www.geeksforgeeks.org/skip-list-set-2-insertion/
+// URL: http://www.geeksforgeeks.org/skip-list-set-3-searching-deletion/
 #include <cstdlib>
 
 #include <iostream>
@@ -41,12 +43,16 @@ class Skiplist {
 		Node *header;
 
 		int random_level();
+		Node* get_equal_or_next(int key, Node **update);
 
 	public:
 		Skiplist(int, float);
 		~Skiplist();
 
 		void insert(int key);
+		bool search(int key);
+		void remove(int key);
+
 		friend std::ostream& operator<<(std::ostream &stream, const Skiplist &list);
 };
 
@@ -75,24 +81,37 @@ int Skiplist::random_level() {
 	return level;
 }
 
-void Skiplist::insert(int key) {
+Node* Skiplist::get_equal_or_next(int key, Node** update) {
 	Node *current = this->header;
-
-	// Create update array and initialize it
-	Node *update[this->MAX_LEVEL + 1];
-	memset(update, 0, sizeof(Node*)*(this->MAX_LEVEL + 1));
-
-	for(int i = level; i >= 0; i--) {
-		while ( (current->forward[i] != NULL) &&
-				(current->forward[i]->key < key) ) {
-			current = current->forward[i];
+	
+	for(int i = level; i >=0; i--) {
+		while ( current->forward[i] &&	
+			  (	current->forward[i]->key < key)) {
+				current = current->forward[i];
 		}
-		update[i] = current;
+
+		if(update) {
+			update[i] = current;
+		}
 	}
 
 	// Reached level 0. Forward the current to one position to the right.
 	// That is the insert position.
-	current = current->forward[0];
+	return current->forward[0];
+}
+
+bool Skiplist::search(int key) {
+
+	Node *node = get_equal_or_next(key, NULL);
+	return ((node) && (node->key == key));
+}
+
+void Skiplist::insert(int key) {
+	// Create update array and initialize it
+	Node *update[this->MAX_LEVEL + 1];
+	memset(update, 0, sizeof(Node*)*(this->MAX_LEVEL + 1));
+
+	Node *current = get_equal_or_next(key, update);
 
 	if ( (current == NULL) || (current->key != key)) {
 		
@@ -107,6 +126,29 @@ void Skiplist::insert(int key) {
 		for (int i = 0; i <= new_level; i++) {
 			n->forward[i] = update[i]->forward[i];
 			update[i]->forward[i] = n;
+		}
+	}
+}
+
+void Skiplist::remove(int key) {
+	// Create update array and initialize it
+	Node *update[this->MAX_LEVEL + 1];
+	memset(update, 0, sizeof(Node*)*(this->MAX_LEVEL + 1));
+
+	Node *current = get_equal_or_next(key, update);
+
+	if (current && (current->key == key)) {
+
+		for(int i = 0; i <= this->level; i++) {
+			if (update[i]->forward[i] != current) {
+				break;
+			}
+			update[i]->forward[i] = current->forward[i];
+		}
+
+		while ( (this->level > 0) && 
+				(header->forward[this->level] == NULL)) {
+			this->level--;
 		}
 	}
 }
@@ -127,6 +169,8 @@ std::ostream& operator<<(std::ostream &stream, const Skiplist &list) {
 	return stream;
 }
 
+//=============================================================================
+
 int main() {
 	srand( (unsigned)time(0) );
 
@@ -145,4 +189,16 @@ int main() {
 	list.insert(25);
 
 	cout << list;
+
+	// Search for element 19
+	cout << "Found 19 = " << list.search(19) << endl;
+	cout << "Found 100 = " << list.search(100) << endl;
+
+	// Delete 19
+	cout << "Deleting 19..." << endl;
+	list.remove(19);
+	cout << "Found 19 = " << list.search(19) << endl;
+
+	cout << list;
 }
+//=============================================================================
