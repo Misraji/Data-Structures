@@ -262,6 +262,8 @@ void Node::remove_from_leaf(int idx) {
 		this->keys[i-1] = this->keys[i];
 	}
 
+	// No child node pointers to manipulate since this is a leaf.
+	
 	this->num_keys--;
 	return;
 }
@@ -363,7 +365,7 @@ void Node::borrow_from_prev(int idx) {
 	child->keys[0] = this->keys[idx-1];
 
 	// Moving sibling's last child as C[idx]'s first child
-	if (child->leaf == false) {
+	if (this->leaf == false) {
 		child->child[0] = sibling->child[sibling->num_keys];
 	}
 
