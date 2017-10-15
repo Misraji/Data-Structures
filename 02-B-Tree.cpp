@@ -1,5 +1,5 @@
 // URL: http://www.geeksforgeeks.org/b-tree-set-1-insert-2/
-//
+// URL: http://www.geeksforgeeks.org/b-tree-set-3delete/
 
 #include <iostream>
 using std::cout;
@@ -38,6 +38,27 @@ class Node {
 		void split_child(int i);
 
 		bool search(int k);
+	
+		int find_key(int k);
+
+		// remove() function and its associated helpers.
+		void remove(int k);
+		
+		void remove_from_leaf(int k);
+
+		void remove_from_non_leaf(int k);
+
+		int get_pred(int index);
+
+		int get_succ(int index);
+
+		void fill(int index);
+
+		void borrow_from_prev(int index);
+
+		void borrow_from_next(int index);
+
+		void merge(int idx);
 
 		friend class BTree;
 		friend ostream& operator<<(ostream&, const Node &);
@@ -175,6 +196,262 @@ void Node::split_child(int child_index) {
 	this->num_keys++;
 }
 
+int Node::find_key(int k) {
+	int idx = 0;
+	while ((idx < this->num_keys) && (this->keys[idx] < k)) {
+		idx++;
+	}
+	return idx;
+}
+
+// A function to remove the key k from the sub-tree rooted with this node
+void Node::remove(int k) {
+	int idx = find_key(k);
+
+	if ((idx < this->num_keys) && (keys[idx] == k)) {
+		if (this->leaf) {
+			remove_from_leaf(k);
+
+		} else {
+			remove_from_non_leaf(k);
+		}
+		return;
+	}
+
+	if (this->leaf) {
+		cout << "The key " << k << " does not exist in the tree." << endl;
+		return;
+	}
+
+	// Ok. So, at this point, either
+	// - idx == this->num_keys OR
+	// - ((idx < this->num_keys) AND (keys[idx] != k))
+	
+	// The key to be removed is present in the sub-tree rooted with this node.
+	// The flag indicates whether the key is present in the sub-tree rooted
+	// with the last child of this node.
+	bool flag = (idx == this->num_keys);
+
+	// If the child where the key is supposed to exist has less than t keys,
+	// we will fill that child. This is done by borrowing keys from
+	// neighboring nodes, if possible
+	if (this->child[idx]->num_keys < this->T) {
+		this->fill(idx);
+	}
+
+	// If the last child has been merged, it must have merged with the
+	// previous child and so we recurse on the (idx-1)th child. Else, we
+	// recurse on the idx-th child, which now has atleast T keys.
+	if (flag && (idx > this->num_keys)) {
+		this->child[idx-1]->remove(k);
+
+	} else {
+		// Invoked for the case
+		// - idx < this-num_keys OR
+		// - ((idx == this->num_keys) AND (idx <= this->num_keys))
+		this->child[idx]->remove(k);
+	}
+
+	return;
+}
+
+void Node::remove_from_leaf(int idx) {
+	
+	// Move all the keys after the idx-th position, one place backward.
+	for (int i = idx+1; (i < this->num_keys); i++) {
+		this->keys[i-1] = this->keys[i];
+	}
+
+	this->num_keys--;
+	return;
+}
+
+void Node::remove_from_non_leaf(int idx) {
+	int k = this->keys[idx];
+
+	if (this->child[idx] >= this->T) {
+		// We shifted the responsibility to deleting pred from previous-child 
+		// instead of k itself.
+		int pred = get_pred(idx);
+		keys[idx] = pred;
+		this->child[idx]->remove(pred);
+
+	} else if (this->child[idx + 1] >= this->T) {
+		// We shifted the responsibility to delete the succ value from the
+		// next child instead of k itself
+		int succ = get_succ(idx);
+		keys[idx] = succ;
+		this->child[idx+1]->remove(succ);
+
+	} else {
+		// Both previous and next child have less than t keys. Merge them AND
+		// the k value into the C[idx]. Now, C[idx] has 2t-1 keys. Free
+		// C[idx+1], and delete k from C[idx]
+		this->merge(idx);
+		this->child[idx]->remove(k);
+	}
+}
+
+// A function to get predecessor of the key at the specified idx:
+// this->keys[idx]
+int Node::get_pred(int idx) {
+	// Keep moving towards right for child previous to keys[idx]
+	shared_ptr<Node> curr = this->child[idx];
+	while (curr->leaf == false) {
+		curr = curr->child[curr->num_keys];
+	}
+
+	// Return the last key of the leaf
+	return curr->keys[curr->num_keys-1];
+}
+
+// A function to get the success of key at specified idx: this->keys[idx]
+int Node::get_succ(int idx) {
+	// Keep moving towards right for child previous to keys[idx]
+	shared_ptr<Node> curr = this->child[idx+1];
+	while (curr->leaf == false) {
+		curr = curr->child[0];
+	}
+
+	// Return the first key of the leaf
+	return curr->keys[0];
+}
+
+// A function to fill child C[idx] which has less than t-1 keys. 
+void Node::fill(int idx) {
+	
+	if ( (idx != 0) && (this->child[idx-1]->num_keys >= this->T)) {
+		this->borrow_from_prev(idx);
+
+	} else if ((idx != this->num_keys) && (this->child[idx+1]->num_keys >= T)) {
+		this->borrow_from_next(idx);
+
+	} else if (idx != this->num_keys) {
+		// Merge child[idx] with keys[idx] && child[idx+1];
+		merge(idx);
+
+	} else {
+		// Merge child[idx] with keys[idx-1] and child[idx-1]
+		// Question: What about the 0 idex check here??
+		merge(idx-1);
+	}
+}
+
+// A function to borrow a key from this->child[idx-1] and insert into
+// this->child[idx]
+void Node::borrow_from_prev(int idx) {
+	
+	shared_ptr<Node> child = this->child[idx];
+	shared_ptr<Node> sibling = this->child[idx-1];
+
+	// The last key from C[idx-1] goes up to the parent and key[idx-1]
+	// from parent is inserted as the first key in C[idx]. Thus, the  loses
+	// sibling one key and child gains one key
+ 
+	// Moving all key in C[idx] one step ahead	
+	for (int i = (child->num_keys-1); i >=0; --i) {
+		child->keys[i+1] = child-keys[i];
+	}
+
+	if (child->leaf == false) {
+		for(int i = child->num_keys; i >= 0; i--) {
+			child->child[i+1] = child->child[i];
+		}
+	}	
+
+	// Setting child's first key equal to keys[idx-1] from the current node
+	child->keys[0] = this->keys[idx-1];
+
+	// Moving sibling's last child as C[idx]'s first child
+	if (child->leaf == false) {
+		child->child[0] = sibling->child[sibling->num_keys];
+	}
+
+	// Moving the key from the sibling to the parent
+	keys[idx-1] = sibling->keys[sibling->num_keys -1];
+
+	child->num_keys++;
+	sibling->num_keys--;
+
+}
+
+// A function to borrow a key from the C[idx+1] and place it in child[idx+1]
+void Node::borrow_from_next(int idx) {
+	
+	shared_ptr<Node> child = this->child[idx];
+	shared_ptr<Node> sibling = this->child[idx+1];
+
+	// Current node's keys[idx] is inserted as the last key in C[idx]
+	child->keys[child->num_keys] = this->keys[idx];
+
+	// Sibling's first child is inserted as the last child into C[idx]
+	if (child->leaf == false) {
+		child->child[child->num_keys + 1] = sibling->child[0];
+	}
+
+	//The first key from sibling is inserted into keys[idx]
+	this->keys[idx] = sibling->keys[0];
+
+	// Moving all keys in sibling one step behind
+	for (int i = 1; i < sibling->num_keys; i++) {
+		sibling->keys[i-1] = sibling->keys[i];
+	}
+
+	if (sibling->leaf == false) {
+		for(int i = 1; i <= sibling->num_keys; i++) {
+			sibling->child[i-1] = sibling->child[i];
+		}
+	}
+
+	// Increasing and decreasing the key count of C[idx] and C[idx+1]
+	// respectively.
+	child->num_keys++;
+	sibling->num_keys--;
+
+}
+
+// A function to merge this->child[idx] with this->child[(idx+1)]
+// this->child[idx+1] is freed after the merging.
+void Node::merge(int idx) {
+	
+	shared_ptr<Node> child = this->child[idx];
+	shared_ptr<Node> sibling = this->child[idx+1];
+
+	// Pull the key from the current node and insert it into the (t-1)th
+	// position. 
+	child->keys[this->T-1] = this->keys[idx];
+	
+	// In the current node, moving all keys after idx, one step before.
+	for (int i = idx+1; i < this->num_keys; i++) {
+		this->keys[i-1] = this->keys[i];
+	}
+
+	// Copying the keys from C[idx+1] to C[idx] at the end
+	for(int i = 0; i < sibling->num_keys; i++) {
+		child->keys[i+ this->T] = sibling->keys[i];
+	}
+
+	// Copying the child pointers from C[idx+1] to C[idx]
+	if (child->leaf == false) {
+		for (int i = 0; i < sibling->num_keys; i++) {
+			child->child[i + T] = sibling->child[i];
+		}
+	}
+	
+	// In the current node, moving all the child-pointers after (idx+1) one
+	// step before (simply because idx[i+1] == sibling-node is to be deleted.
+	for (int i = idx+2; i <= this->num_keys; i++) {
+		this->child[i-1] = this->child[i];
+	}
+
+	// Update key counts for current node and child node.
+	this->num_keys--;
+	this->child[idx]->num_keys += (sibling->num_keys + 1);
+
+	// Deleting sibling by letting sibling go out of scope.
+	return;
+}
+
 //=============================================================================
 
 class BTree {
@@ -192,6 +469,8 @@ class BTree {
 
 		// The main function that inserts elements into this btree.
 		void insert(int k);
+
+		void remove(int k);
 
 		friend ostream& operator<<(ostream&, const BTree &);
 };
@@ -239,9 +518,29 @@ void BTree::insert(int k) {
 	this->root = new_root;
 }
 
+void BTree::remove(int k) {
+	if (root == nullptr) {
+		return;
+	}
+
+	//	Call the remove function on the 
+	root->remove(k);
+
+	// If root node now has 0 keys, make its first child as the root (if
+	// child exists). Else set it to null.
+	if(root->num_keys == 0) {
+		shared_ptr<Node> tmp = root;
+		if (root->leaf) {
+			root = nullptr;
+		} else {
+			root = root->child[0];
+		}
+	}
+}
+
 //=============================================================================
 
-int main(int argc, char **argv) {
+int main_insert(int argc, char **argv) {
     BTree t(3); // A B-Tree with minium degree 3
     t.insert(10);
     t.insert(20);
@@ -266,4 +565,65 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+int main_delete(int argc, char **argv) {
+    BTree t(3); // A B-Tree with minium degree 3
+ 
+    t.insert(1);
+    t.insert(3);
+    t.insert(7);
+    t.insert(10);
+    t.insert(11);
+    t.insert(13);
+    t.insert(14);
+    t.insert(15);
+    t.insert(18);
+    t.insert(16);
+    t.insert(19);
+    t.insert(24);
+    t.insert(25);
+    t.insert(26);
+    t.insert(21);
+    t.insert(4);
+    t.insert(5);
+    t.insert(20);
+    t.insert(22);
+    t.insert(2);
+    t.insert(17);
+    t.insert(12);
+    t.insert(6);
+ 
+    cout << "Traversal of tree constructed is\n";
+    cout << t << endl;
+ 
+    t.remove(6);
+    cout << "Traversal of tree after removing 6\n";
+    cout << t << endl;
+ 
+    t.remove(13);
+    cout << "Traversal of tree after removing 13\n";
+    cout << t << endl;
+ 
+    t.remove(7);
+    cout << "Traversal of tree after removing 7\n";
+    cout << t << endl;
+ 
+    t.remove(4);
+    cout << "Traversal of tree after removing 4\n";
+    cout << t << endl;
+ 
+    t.remove(2);
+    cout << "Traversal of tree after removing 2\n";
+    cout << t << endl;
+ 
+    t.remove(16);
+    cout << "Traversal of tree after removing 16\n";
+    cout << t << endl;
+ 
+    return 0;
+}
+
+int main(int argc, char **argv) {
+	// return main_insert(argc, argv);
+	return main_delete(argc, argv);
+}
 //=============================================================================
