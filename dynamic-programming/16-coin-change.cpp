@@ -17,11 +17,14 @@ int count(const vector<int> &coins, const int value) {
 
 	vector<vector<int> > dp_table((coins.size() + 1), vector<int>(value+1));
 
+	// If there are no coins, there are 0 ways of returning change.
 	for(int j = 0; j < (value+1); j++) {
 		dp_table[0][j] = 0;
 	}
 
-	for(int i = 0; i < (coins.size()+1); i++) {
+	// For any non-zero number of coins, number of ways of return 0 worth of
+	// change is 1 (all 0 coins)
+	for(int i = 1; i < (coins.size()+1); i++) {
 		dp_table[i][0] = 1;
 	}
 
